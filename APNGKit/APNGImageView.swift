@@ -40,6 +40,20 @@
     @objc optional func apngImageView(_ imageView: APNGImageView, didFinishPlaybackForRepeatedCount count: Int)
 }
 
+class APNGImageViewUpdater: NSObject {
+    private weak var view: APNGImageView? = nil
+
+    init(_ view: APNGImageView) {
+        super.init()
+        self.view = view
+    }
+
+    @objc
+    func update() {
+        view?.tick()
+    }
+}
+
 /// An APNG image view object provides a view-based container for displaying an APNG image.
 /// You can control the starting and stopping of the animation, as well as the repeat count.
 /// All images associated with an APNGImageView object should use the same scale. 
@@ -106,15 +120,13 @@ open class APNGImageView: APNGView {
         }
     }
 
-    var timer: GCDTimer?
     var lastTimestamp: TimeInterval = 0
     var currentPassedDuration: TimeInterval = 0
     var currentFrameDuration: TimeInterval = 0
-    
     var currentFrameIndex: Int = 0
-    
     var repeated: Int = 0
-    
+    private var displayLink : CADisplayLink?
+
     /**
     Initialize an APNG image view with the specified image.
     
@@ -205,11 +217,14 @@ open class APNGImageView: APNGView {
         }
         
         isAnimating = true
-        timer = GCDTimer(intervalInSecs: 0.016)
-        timer!.Event = { [weak self] in
-            DispatchQueue.main.sync { self?.tick() }
+
+        if let dlink = displayLink {
+            dlink.remove(from: .current, forMode: .commonModes)
         }
-        timer!.start()
+        displayLink = CADisplayLink(target: APNGImageViewUpdater(self), selector: #selector(APNGImageViewUpdater.update))
+        if let dlink = displayLink {
+            dlink.add(to: .current, forMode: .commonModes)
+        }
     }
     
     /**
@@ -228,14 +243,17 @@ open class APNGImageView: APNGView {
             return
         }
         
+        if let dlink = displayLink {
+            dlink.remove(from: .current, forMode: .commonModes)
+            displayLink = nil
+        }
+
         isAnimating = false
         repeated = 0
         lastTimestamp = 0
         currentPassedDuration = 0
         currentFrameDuration = 0
         currentFrameIndex = 0
-        
-        timer = nil
     }
     
     func tick() {
